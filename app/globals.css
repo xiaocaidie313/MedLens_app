@@ -1,8 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Coze / 飞书系：冷灰底 + 白卡片 + 蓝紫主色 */
+  --background: #f2f3f5;
+  --foreground: #1d2129;
+  --chat-bg: #f2f3f5;
+  --chat-main: #f7f8fa;
+  --chat-sidebar: #ffffff;
+  --chat-sidebar-edge: #e5e7eb;
+  --chat-sidebar-active: rgba(79, 70, 229, 0.09);
+  --chat-sidebar-active-bar: #4f46e5;
+  --chat-surface: #ffffff;
+  --chat-input-bg: #ffffff;
+  --chat-input-well: #f2f3f5;
+  --chat-border: #e8eaed;
+  --chat-hover: rgba(29, 33, 41, 0.05);
+  --chat-text: #1d2129;
+  --chat-muted: #646a73;
+  --chat-faint: #8f959e;
+  --chat-accent: #4f46e5;
+  --chat-accent-hover: #4338ca;
+  --chat-assistant-bg: #ffffff;
+  --chat-assistant-border: #e8eaed;
+  --chat-user-bg: #4f46e5;
+  --chat-user-bg-hover: #4338ca;
+  --chat-shadow-card: 0 1px 2px rgba(29, 33, 41, 0.06),
+    0 4px 12px rgba(29, 33, 41, 0.04);
+  --chat-shadow-input: 0 0 0 1px #e8eaed inset;
 }
 
 @theme inline {
@@ -14,13 +38,56 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0f1114;
+    --foreground: #e8eaed;
+    --chat-bg: #0f1114;
+    --chat-main: #14171c;
+    --chat-sidebar: #1a1d24;
+    --chat-sidebar-edge: #2d323c;
+    --chat-sidebar-active: rgba(99, 102, 241, 0.18);
+    --chat-sidebar-active-bar: #818cf8;
+    --chat-surface: #1a1d24;
+    --chat-input-bg: #1a1d24;
+    --chat-input-well: #252a33;
+    --chat-border: #2d323c;
+    --chat-hover: rgba(255, 255, 255, 0.06);
+    --chat-text: #e8eaed;
+    --chat-muted: #9aa0a9;
+    --chat-faint: #6b7280;
+    --chat-accent: #6366f1;
+    --chat-accent-hover: #818cf8;
+    --chat-assistant-bg: #1a1d24;
+    --chat-assistant-border: #2d323c;
+    --chat-user-bg: #6366f1;
+    --chat-user-bg-hover: #818cf8;
+    --chat-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --chat-shadow-input: 0 0 0 1px #2d323c inset;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.coze-primary-btn {
+  background: linear-gradient(180deg, #5b52f0 0%, var(--chat-accent) 100%);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.25);
+}
+
+.coze-primary-btn:hover {
+  filter: brightness(1.05);
+}
+
+.coze-chip {
+  border: 1px solid var(--chat-border);
+  background: var(--chat-surface);
+  color: var(--chat-text);
+}
+
+.coze-chip:hover {
+  border-color: rgba(79, 70, 229, 0.35);
+  background: var(--chat-main);
 }

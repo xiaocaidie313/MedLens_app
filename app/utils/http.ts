@@ -16,37 +16,54 @@ export interface ResponseType<T> {
   data: T
 }
 
-type HttpMethod = (typeof Method)[keyof typeof Method]
-const token = localStorage.getItem("token")
+export function unwarpResponse<T>(response: ResponseType<T>) {
+  if (response.code !== 200) {
+    // 返回的错误信息
+    console.error(response.message)
+    throw new Error(response.message)
+  }
+  return response.data
+}
 
-const headers = {
-  "Content-Type": "application/json",
-  "Authorization": `Bearer ${token}`
-} as const
+type HttpMethod = (typeof Method)[keyof typeof Method]
+
+/** `skipAuth: true` 时不校验 token（例如本地公开接口 /api/hello） */
+export type HttpRequestConfig = AxiosRequestConfig & { skipAuth?: boolean }
 
 function request<T>(
   fetchUrl: string,
   method: HttpMethod,
   payload?: unknown,
-  config?: AxiosRequestConfig,
+  config?: HttpRequestConfig,
 ): Promise<T> {
-  if (!token) {
+  const skipAuth = config?.skipAuth === true
+  const token = localStorage.getItem("token")
+
+  if (!skipAuth && !token) {
     throw new Error("Unauthorized")
   }
-  
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+
   const payloadFields =
     method === Method.POST
       ? { data: payload }
       : { params: payload }
 
+  const axiosConfig = { ...(config ?? {}) } as HttpRequestConfig
+  delete axiosConfig.skipAuth
+
   return axios
     .request<T>({
-      ...config,
-      baseURL: baseURL || config?.baseURL,
+      ...axiosConfig,
+      baseURL: baseURL || axiosConfig.baseURL,
       url: fetchUrl,
       method,
       ...payloadFields,
-      headers,
+      headers: { ...headers, ...axiosConfig.headers },
     })
     .then((response) => response.data)
 }
@@ -54,19 +71,19 @@ function request<T>(
 export const get = <T>(
   fetchUrl: string,
   params?: unknown,
-  config?: AxiosRequestConfig,
+  config?: HttpRequestConfig,
 ) => request<T>(fetchUrl, Method.GET, params, config)
 
 export const post = <T>(
   fetchUrl: string,
   data?: unknown,
-  config?: AxiosRequestConfig,
+  config?: HttpRequestConfig,
 ) => request<T>(fetchUrl, Method.POST, data, config)
 
 export const del = <T>(
   fetchUrl: string,
   params?: unknown,
-  config?: AxiosRequestConfig,
+  config?: HttpRequestConfig,
 ) => request<T>(fetchUrl, Method.DELETE, params, config)
 
 export const instance = {
