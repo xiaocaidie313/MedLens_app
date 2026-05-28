@@ -8,6 +8,9 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
+import { useRouter } from "next/navigation"
+
+import { get, post, unwarpResponse, type ResponseType } from "@/app/utils/http"
 
 export type ChatMessage = { id: string; role: "user" | "assistant"; content: string }
 
@@ -16,6 +19,21 @@ export type ChatSession = {
   title: string
   updatedAt: number
   messages: ChatMessage[]
+}
+
+type AuthUser = {
+  id: string
+  name: string
+  email: string
+}
+
+type MeData = {
+  user: AuthUser
+}
+
+type ChatData = {
+  message: ChatMessage
+  model: string
 }
 
 function uid() {
@@ -66,6 +84,7 @@ const SUGGESTIONS = [
 ]
 
 export function ChatApp() {
+  const router = useRouter()
   const [sessions, setSessions] = useState<ChatSession[]>(() => [
     {
       id: "seed-1",
@@ -89,6 +108,9 @@ export function ChatApp() {
   const [activeId, setActiveId] = useState("seed-1")
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [error, setError] = useState("")
+  const [model, setModel] = useState("")
   const listEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -104,6 +126,27 @@ export function ChatApp() {
   useEffect(() => {
     scrollToBottom()
   }, [active?.messages, scrollToBottom])
+
+  useEffect(() => {
+    let cancelled = false
+
+    get<ResponseType<MeData>>("/api/auth/me", undefined, { skipAuth: true })
+      .then((response) => {
+        const data = unwarpResponse(response)
+        if (!cancelled) {
+          setUser(data.user)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          router.replace("/login")
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   useEffect(() => {
     const el = textareaRef.current
@@ -132,8 +175,13 @@ export function ChatApp() {
     if (!text || !sessionId || isSending) return
 
     setIsSending(true)
+    setError("")
     setDraft("")
     const userMsg: ChatMessage = { id: uid(), role: "user", content: text }
+    const requestMessages = [...(active?.messages ?? []), userMsg].map(({ role, content }) => ({
+      role,
+      content,
+    }))
 
     setSessions((prev) =>
       prev.map((s) => {
@@ -151,30 +199,34 @@ export function ChatApp() {
       }),
     )
 
-    await new Promise((r) => window.setTimeout(r, 480))
+    try {
+      const response = await post<ResponseType<ChatData>>("/api/chat", { messages: requestMessages })
+      const data = unwarpResponse(response)
+      setModel(data.model)
 
-    const reply: ChatMessage = {
-      id: uid(),
-      role: "assistant",
-      content:
-        "我已收到你的消息。接入真实模型时，把流式输出写回本条助手消息即可。",
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                messages: [...s.messages, data.message],
+                updatedAt: Date.now(),
+              }
+            : s,
+        ),
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "发送失败，请稍后重试"
+      setError(message)
+      if (message === "Unauthorized") {
+        router.replace("/login")
+      }
+    } finally {
+      setIsSending(false)
+      requestAnimationFrame(() => textareaRef.current?.focus())
     }
 
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === sessionId
-          ? {
-              ...s,
-              messages: [...s.messages, reply],
-              updatedAt: Date.now(),
-            }
-          : s,
-      ),
-    )
-
-    setIsSending(false)
-    requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [active?.id, draft, isSending])
+  }, [active?.id, active?.messages, draft, isSending, router])
 
   const sortedSidebar = useMemo(
     () => [...sessions].sort((a, b) => b.updatedAt - a.updatedAt),
@@ -191,6 +243,12 @@ export function ChatApp() {
   const applySuggestion = (t: string) => {
     setDraft(t)
     requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  const logout = async () => {
+    await post<ResponseType<{ ok: true }>>("/api/auth/logout", undefined, { skipAuth: true }).catch(() => null)
+    router.replace("/login")
+    router.refresh()
   }
 
   const empty = !active?.messages.length
@@ -257,10 +315,22 @@ export function ChatApp() {
 
       {/* 主区 */}
       <main className="flex min-w-0 flex-1 flex-col bg-[var(--chat-main)]">
-        <header className="flex h-[52px] shrink-0 items-center border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-5">
-          <h1 className="truncate text-[15px] font-semibold text-[var(--chat-text)]">
-            {active?.title ?? "对话"}
-          </h1>
+        <header className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-5">
+          <div className="min-w-0">
+            <h1 className="truncate text-[15px] font-semibold text-[var(--chat-text)]">
+              {active?.title ?? "对话"}
+            </h1>
+            <p className="truncate text-[11px] text-[var(--chat-faint)]">
+              {model ? `模型：${model}` : user ? `已登录：${user.name}` : "正在校验登录状态"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="shrink-0 rounded-lg border border-[var(--chat-border)] px-3 py-1.5 text-xs font-medium text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)]"
+          >
+            登出
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -313,6 +383,14 @@ export function ChatApp() {
                   </div>
                 ),
               )}
+              {isSending ? (
+                <div className="mb-6 flex gap-3">
+                  <IconBot />
+                  <div className="min-w-0 flex-1 rounded-xl border border-[var(--chat-assistant-border)] bg-[var(--chat-assistant-bg)] px-4 py-3 text-[14px] text-[var(--chat-muted)] shadow-[var(--chat-shadow-card)]">
+                    正在思考...
+                  </div>
+                </div>
+              ) : null}
               <div ref={listEndRef} />
             </div>
           )}
@@ -320,15 +398,21 @@ export function ChatApp() {
 
         {/* 底部输入：白底工具条 + 灰槽 */}
         <div className="shrink-0 border-t border-[var(--chat-border)] bg-[var(--chat-surface)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {error ? (
+            <div className="mx-auto mb-2 max-w-3xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              {error}
+            </div>
+          ) : null}
           <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl bg-[var(--chat-input-well)] p-1.5 shadow-[var(--chat-shadow-input)]">
             <textarea
               ref={textareaRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
+              disabled={isSending}
               rows={1}
-              placeholder="输入消息，Enter 发送"
-              className="max-h-52 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-[14px] leading-6 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-faint)]"
+              placeholder={isSending ? "AI 正在回复..." : "输入消息，Enter 发送"}
+              className="max-h-52 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-[14px] leading-6 text-[var(--chat-text)] outline-none placeholder:text-[var(--chat-faint)] disabled:cursor-not-allowed disabled:opacity-70"
             />
             <button
               type="button"

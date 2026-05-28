@@ -27,7 +27,7 @@ export function unwarpResponse<T>(response: ResponseType<T>) {
 
 type HttpMethod = (typeof Method)[keyof typeof Method]
 
-/** `skipAuth: true` 时不校验 token（例如本地公开接口 /api/hello） */
+/** 保留 `skipAuth` 兼容旧调用；当前鉴权由 HttpOnly Cookie 在服务端完成。 */
 export type HttpRequestConfig = AxiosRequestConfig & { skipAuth?: boolean }
 
 function request<T>(
@@ -36,16 +36,8 @@ function request<T>(
   payload?: unknown,
   config?: HttpRequestConfig,
 ): Promise<T> {
-  const skipAuth = config?.skipAuth === true
-  const token = localStorage.getItem("token")
-
-  if (!skipAuth && !token) {
-    throw new Error("Unauthorized")
-  }
-
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 
   const payloadFields =
@@ -63,6 +55,8 @@ function request<T>(
       url: fetchUrl,
       method,
       ...payloadFields,
+      withCredentials: true,
+      validateStatus: axiosConfig.validateStatus ?? (() => true),
       headers: { ...headers, ...axiosConfig.headers },
     })
     .then((response) => response.data)
